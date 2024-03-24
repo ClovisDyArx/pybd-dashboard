@@ -2,9 +2,8 @@
 import sqlalchemy
 import pandas as pd
 import numpy as np
-from dash import Dash, html, dcc, callback, Output, Input
+from dash import Dash, html, dcc, callback, Output, Input, dash_table
 import plotly.graph_objs as go
-
 
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * \/ \/ \/ \/ BEFORE MODIFS \/ \/ \/ \/ * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
 """
@@ -129,6 +128,21 @@ whole_selector = html.Div(children=[
 
 ], style={'display': 'flex', 'flexDirection': 'row'})
 
+stock_info_table = dash_table.DataTable(
+    id='stock-table',
+    columns=[
+        {'name': 'Date', 'id': 'date-column'},
+        {'name': 'Min', 'id': 'min-column'},
+        {'name': 'Max', 'id': 'max-column'},
+        {'name': 'Start', 'id': 'start-column'},
+        {'name': 'End', 'id': 'end-column'},
+        {'name': 'Mean', 'id': 'mean-column'},
+        {'name': 'Std Dev', 'id': 'std-dev-column'}
+    ],
+    page_size=10,
+    data=[]
+)
+
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * APP LAYOUT * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
 # TODO : compléter le layout.
 
@@ -151,6 +165,7 @@ app.layout = html.Div([
         # Div Droite
         html.Div(children=[
             html.Label("Infos sur le(s) stock(s) sélectionné(s)"),
+            stock_info_table,
         ], style={'padding': 10, 'flex': 1}),
     ], style={'display': 'flex', 'flexDirection': 'row', 'padding': '5% 0'}),
 ])
@@ -162,12 +177,15 @@ app.layout = html.Div([
 
 @callback(
     Output('stock-graph', 'figure'),
+    Output('stock-table', 'data'),
     Input('stock-selector', 'value'),
     Input('visualization-type', 'value'),
     Input('bollinger-switch', 'value')
 )
 def update_graph(selected_stocks, visualization_type, bollinger_switch_value):
     traces = []
+    data = []
+
     for current_stock in selected_stocks:
         if visualization_type == 'lines':
             traces.append(go.Scatter(x=stock_data['Date'],
@@ -185,26 +203,41 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value):
 
         if 'bollinger' in bollinger_switch_value:
             # https://fr.wikipedia.org/wiki/Bandes_de_Bollinger
-            rolling_mean = stock_data[current_stock].rolling(window=20).mean()
-            rolling_std = stock_data[current_stock].rolling(window=20).std()
+            mean = stock_data[current_stock].rolling(window=20).mean()
+            std = stock_data[current_stock].rolling(window=20).std()
 
-            upper_band = rolling_mean + (2 * rolling_std)
-            lower_band = rolling_mean - (2 * rolling_std)
+            upper_band = mean + (2 * std)
+            lower_band = mean - (2 * std)
 
             traces.append(go.Scatter(x=stock_data['Date'],
                                      y=upper_band, mode='lines',
-                                     name=f'{current_stock} Upper Band',
+                                     name=f'{current_stock} Bollinger\'s Upper Band',
                                      line=dict(color='blue', dash='dash')))
 
             traces.append(go.Scatter(x=stock_data['Date'],
                                      y=lower_band,
                                      mode='lines',
-                                     name=f'{current_stock} Lower Band',
+                                     name=f'{current_stock} Bollinger\'s Lower Band',
                                      line=dict(color='red', dash='dash')))
 
     layout = go.Layout(title='Stock Prices', xaxis=dict(title='Date'), yaxis=dict(title='Price'))
 
-    return {'data': traces, 'layout': layout}
+    for date in stock_data['Date']:
+        row_data = {
+            'date-column': date,
+            'min-column': stock_data.loc[stock_data['Date'] == date, selected_stocks].min().min(),
+            'max-column': stock_data.loc[stock_data['Date'] == date, selected_stocks].max().max(),
+            'start-column': stock_data.loc[stock_data['Date'] == date, selected_stocks].iloc[0, :].min(),
+            'end-column': stock_data.loc[stock_data['Date'] == date, selected_stocks].iloc[-1, :].max(),
+            'mean-column': stock_data.loc[stock_data['Date'] == date, selected_stocks].mean().mean(),
+            'std-dev-column': stock_data.loc[stock_data['Date'] == date, selected_stocks].std().mean()
+        }
+        data.append(row_data)
+
+        # Create the figure for the graph
+    fig = {'data': traces, 'layout': layout}
+
+    return fig, data
 
 
 if __name__ == '__main__':
