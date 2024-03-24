@@ -41,6 +41,7 @@ def run_query(n_clicks, query):
 
 
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * TESTING VALUES * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
+
 dates = pd.date_range(start='2022-01-01', end='2022-12-31', freq='h')
 num_data_points_per_day = 48
 num_days = len(dates) // num_data_points_per_day
@@ -65,6 +66,7 @@ pure_stock_columns = [col for col in stock_data.columns if '.' not in col]
 
 
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * APP SETUP * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
+
 DATABASE_URI = 'timescaledb://ricou:monmdp@db:5432/bourse'    # inside docker
 # DATABASE_URI = 'timescaledb://ricou:monmdp@localhost:5432/bourse'  # outisde docker
 engine = sqlalchemy.create_engine(DATABASE_URI)
@@ -97,6 +99,16 @@ graph_selector = html.Div(children=[
     )
 ])
 
+bollinger_switch = html.Div(children=[
+    dcc.Checklist(
+        id='bollinger-switch',
+        options=[
+            {'label': 'Show Bollinger Bands', 'value': 'bollinger'}
+        ],
+        value=[]
+    )
+])
+
 whole_selector = html.Div(children=[
     # Div Gauche
     html.Div(children=[
@@ -104,11 +116,16 @@ whole_selector = html.Div(children=[
         stock_selector,
     ], style={'padding': 10, 'flex': 1}),
 
-    # Div Droite
+    # Div Milieu
     html.Div(children=[
         html.Label('Select visualization type:'),
         graph_selector,
-    ], style={'flex': 1, 'padding': '0 25%'}),
+    ], style={'flex': 1, 'padding': '0 10%'}),
+
+    # Div Droite
+    html.Div(children=[
+        bollinger_switch,
+    ], style={'flex': 1, 'padding': '0 10%'}),
 
 ], style={'display': 'flex', 'flexDirection': 'row'})
 
@@ -146,24 +163,44 @@ app.layout = html.Div([
 @callback(
     Output('stock-graph', 'figure'),
     Input('stock-selector', 'value'),
-    Input('visualization-type', 'value')
+    Input('visualization-type', 'value'),
+    Input('bollinger-switch', 'value')
 )
-def update_graph(selected_stocks, visualization_type):
+def update_graph(selected_stocks, visualization_type, bollinger_switch_value):
     traces = []
-    for stock in selected_stocks:
+    for current_stock in selected_stocks:
         if visualization_type == 'lines':
             traces.append(go.Scatter(x=stock_data['Date'],
-                                     y=stock_data[stock],
+                                     y=stock_data[current_stock],
                                      mode='lines',
-                                     name=stock))
+                                     name=current_stock))
 
         elif visualization_type == 'candlesticks':
             traces.append(go.Candlestick(x=stock_data['Date'],
-                                         open=stock_data[f'{stock}.Open'],
-                                         high=stock_data[f'{stock}.High'],
-                                         low=stock_data[f'{stock}.Low'],
-                                         close=stock_data[f'{stock}.Close'],
-                                         name=stock))
+                                         open=stock_data[f'{current_stock}.Open'],
+                                         high=stock_data[f'{current_stock}.High'],
+                                         low=stock_data[f'{current_stock}.Low'],
+                                         close=stock_data[f'{current_stock}.Close'],
+                                         name=current_stock))
+
+        if 'bollinger' in bollinger_switch_value:
+            # https://fr.wikipedia.org/wiki/Bandes_de_Bollinger
+            rolling_mean = stock_data[current_stock].rolling(window=20).mean()
+            rolling_std = stock_data[current_stock].rolling(window=20).std()
+
+            upper_band = rolling_mean + (2 * rolling_std)
+            lower_band = rolling_mean - (2 * rolling_std)
+
+            traces.append(go.Scatter(x=stock_data['Date'],
+                                     y=upper_band, mode='lines',
+                                     name=f'{current_stock} Upper Band',
+                                     line=dict(color='blue', dash='dash')))
+
+            traces.append(go.Scatter(x=stock_data['Date'],
+                                     y=lower_band,
+                                     mode='lines',
+                                     name=f'{current_stock} Lower Band',
+                                     line=dict(color='red', dash='dash')))
 
     layout = go.Layout(title='Stock Prices', xaxis=dict(title='Date'), yaxis=dict(title='Price'))
 
