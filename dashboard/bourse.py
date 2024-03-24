@@ -42,7 +42,7 @@ def run_query(n_clicks, query):
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * TESTING VALUES * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
 
 dates = pd.date_range(start='2022-01-01', end='2022-12-31', freq='h')
-num_data_points_per_day = 48
+num_data_points_per_day = 12
 num_days = len(dates) // num_data_points_per_day
 
 timestamps = np.repeat(dates[:num_days], num_data_points_per_day)
@@ -222,15 +222,16 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value):
 
     layout = go.Layout(title='Stock Prices', xaxis=dict(title='Date'), yaxis=dict(title='Price'))
 
-    for date in stock_data['Date']:
+    grouped_data = stock_data.groupby(pd.Grouper(key='Date', freq='d'))
+    for date, group_data in grouped_data:
         row_data = {
             'date-column': date,
-            'min-column': stock_data.loc[stock_data['Date'] == date, selected_stocks].min().min(),
-            'max-column': stock_data.loc[stock_data['Date'] == date, selected_stocks].max().max(),
-            'start-column': stock_data.loc[stock_data['Date'] == date, selected_stocks].iloc[0, :].min(),
-            'end-column': stock_data.loc[stock_data['Date'] == date, selected_stocks].iloc[-1, :].max(),
-            'mean-column': stock_data.loc[stock_data['Date'] == date, selected_stocks].mean().mean(),
-            'std-dev-column': stock_data.loc[stock_data['Date'] == date, selected_stocks].std().mean()
+            'min-column': group_data[selected_stocks].min().min(),
+            'max-column': group_data[selected_stocks].max().max(),
+            'start-column': group_data[selected_stocks].iloc[0, :].min(),
+            'end-column': group_data[selected_stocks].iloc[-1, :].max(),
+            'mean-column': group_data[selected_stocks].mean().mean(),
+            'std-dev-column': group_data[selected_stocks].std().mean()
         }
         data.append(row_data)
 
