@@ -1,9 +1,11 @@
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * IMPORTS * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
+import dash.exceptions
 import sqlalchemy
 import pandas as pd
 import numpy as np
 from dash import Dash, html, dcc, callback, Output, Input, dash_table
 import plotly.graph_objs as go
+from datetime import date
 
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * \/ \/ \/ \/ BEFORE MODIFS \/ \/ \/ \/ * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
 """
@@ -104,29 +106,41 @@ bollinger_switch = html.Div(children=[
         options=[
             {'label': 'Show Bollinger Bands', 'value': 'bollinger'}
         ],
-        value=[]
+        value=[],
+        style={'padding': "10px", 'margin-right': '10px'}
+    )
+])
+
+date_picker = html.Div(children=[
+    dcc.DatePickerRange(
+        id='date-picker-range',
+        min_date_allowed=min(stock_data['Date']),
+        max_date_allowed=max(stock_data['Date']),
+        start_date=min(stock_data['Date']),
+        end_date=max(stock_data['Date']),
+        display_format='YYYY-MM-DD'
     )
 ])
 
 whole_selector = html.Div(children=[
     # Div Gauche
     html.Div(children=[
-        html.Label('Select stock(s) to display:'),
+        html.Label('Select stock to display:', style={'font-weight': 'bold'}),
         stock_selector,
-    ], style={'padding': 10, 'flex': 1}),
+    ], style={'flex': 1, 'padding': "10px 10px 5px 10px"}),
 
     # Div Milieu
     html.Div(children=[
-        html.Label('Select visualization type:'),
+        html.Label('Select visualization type:', style={'font-weight': 'bold'}),
         graph_selector,
-    ], style={'flex': 1, 'padding': '0 10%'}),
+    ], style={'flex': 1, 'padding': '10px'}),
 
     # Div Droite
     html.Div(children=[
         bollinger_switch,
-    ], style={'flex': 1, 'padding': '0 10%'}),
+    ], style={'flex': 1, 'padding': '10px'}),
 
-], style={'display': 'flex', 'flexDirection': 'row'})
+], style={'display': 'flex', 'flexDirection': 'row', 'justifyContent': 'space-between'})
 
 stock_info_table = dash_table.DataTable(
     id='stock-table',
@@ -140,7 +154,8 @@ stock_info_table = dash_table.DataTable(
         {'name': 'Std Dev', 'id': 'std-dev-column'}
     ],
     page_size=10,
-    data=[]
+    data=[],
+    style_header={'textAlign': 'center'}
 )
 
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * APP LAYOUT * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
@@ -150,8 +165,9 @@ stock_info_table = dash_table.DataTable(
 app.layout = html.Div([
     # Div Haute
     html.Div(children=[  # TODO
-        html.Label("Barre des tâches ?"),
-    ], style={'display': 'flex', 'flexDirection': 'row'}),
+        html.Label("Barre des tâches ?", style={"font-weight": 'bold', "font-size": '20px'}),
+        date_picker
+    ], style={'display': 'flex', 'flexDirection': 'column', 'background-color': '#f0f0f0', 'padding': '10px', 'width': '100%'}),
 
     # Div Basse
     html.Div(children=[
@@ -160,61 +176,62 @@ app.layout = html.Div([
             dcc.Graph(id='stock-graph'),
             whole_selector,
 
-        ], style={'padding': 10, 'flex': 1}),
+        ], style={'flex': 1, 'padding': '20px', 'background-color': '#f9f9f9', 'border-radius': '10px', 'box-shadow': '0px 0px 10px rgba(0, 0, 0, 0.1)'}),
 
         # Div Droite
         html.Div(children=[
-            html.Label("Infos sur le(s) stock(s) sélectionné(s)"),
+            html.Label("Info on selected stocks"),
             stock_info_table,
-        ], style={'padding': 10, 'flex': 1}),
-    ], style={'display': 'flex', 'flexDirection': 'row', 'padding': '5% 0'}),
+        ], style={'flex': 1, 'padding': '20px', 'background-color': '#f9f9f9', 'border-radius': '10px', 'box-shadow': '0px 0px 10px rgba(0, 0, 0, 0.1)'}),
+    ], style={'display': 'flex', 'flexDirection': 'row', 'justifyContent': 'space-between'}),
 ])
 
 
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * CALLBACKS * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
 # TODO : ajouter un callback pour chaque action utilisateur.
-
-
 @callback(
     Output('stock-graph', 'figure'),
     Output('stock-table', 'data'),
     Input('stock-selector', 'value'),
     Input('visualization-type', 'value'),
-    Input('bollinger-switch', 'value')
+    Input('bollinger-switch', 'value'),
+    Input('date-picker-range', 'start_date'),
+    Input('date-picker-range', 'end_date')
 )
-def update_graph(selected_stocks, visualization_type, bollinger_switch_value):
+def update_graph(selected_stocks, visualization_type, bollinger_switch_value, start_date, end_date):
     traces = []
     data = []
+    filtered_data = stock_data[(pd.to_datetime(stock_data['Date']) >= start_date) & (pd.to_datetime(stock_data['Date']) <= end_date)]
 
     for current_stock in selected_stocks:
         if visualization_type == 'lines':
-            traces.append(go.Scatter(x=stock_data['Date'],
-                                     y=stock_data[current_stock],
+            traces.append(go.Scatter(x=filtered_data['Date'],
+                                     y=filtered_data[current_stock],
                                      mode='lines',
                                      name=current_stock))
 
         elif visualization_type == 'candlesticks':
-            traces.append(go.Candlestick(x=stock_data['Date'],
-                                         open=stock_data[f'{current_stock}.Open'],
-                                         high=stock_data[f'{current_stock}.High'],
-                                         low=stock_data[f'{current_stock}.Low'],
-                                         close=stock_data[f'{current_stock}.Close'],
+            traces.append(go.Candlestick(x=filtered_data['Date'],
+                                         open=filtered_data[f'{current_stock}.Open'],
+                                         high=filtered_data[f'{current_stock}.High'],
+                                         low=filtered_data[f'{current_stock}.Low'],
+                                         close=filtered_data[f'{current_stock}.Close'],
                                          name=current_stock))
 
         if 'bollinger' in bollinger_switch_value:
             # https://fr.wikipedia.org/wiki/Bandes_de_Bollinger
-            mean = stock_data[current_stock].rolling(window=20).mean()
-            std = stock_data[current_stock].rolling(window=20).std()
+            mean = filtered_data[current_stock].rolling(window=20).mean()
+            std = filtered_data[current_stock].rolling(window=20).std()
 
             upper_band = mean + (2 * std)
             lower_band = mean - (2 * std)
 
-            traces.append(go.Scatter(x=stock_data['Date'],
+            traces.append(go.Scatter(x=filtered_data['Date'],
                                      y=upper_band, mode='lines',
                                      name=f'{current_stock} Bollinger\'s Upper Band',
                                      line=dict(color='blue', dash='dash')))
 
-            traces.append(go.Scatter(x=stock_data['Date'],
+            traces.append(go.Scatter(x=filtered_data['Date'],
                                      y=lower_band,
                                      mode='lines',
                                      name=f'{current_stock} Bollinger\'s Lower Band',
@@ -223,17 +240,19 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value):
     layout = go.Layout(title='Stock Prices', xaxis=dict(title='Date'), yaxis=dict(title='Price'))
 
     grouped_data = stock_data.groupby(pd.Grouper(key='Date', freq='d'))
+    selected_dates = pd.date_range(start=start_date, end=end_date, freq='d')
     for date, group_data in grouped_data:
-        row_data = {
-            'date-column': date,
-            'min-column': group_data[selected_stocks].min().min(),
-            'max-column': group_data[selected_stocks].max().max(),
-            'start-column': group_data[selected_stocks].iloc[0, :].min(),
-            'end-column': group_data[selected_stocks].iloc[-1, :].max(),
-            'mean-column': group_data[selected_stocks].mean().mean(),
-            'std-dev-column': group_data[selected_stocks].std().mean()
-        }
-        data.append(row_data)
+        if date in selected_dates:
+            row_data = {
+                'date-column': date,
+                'min-column': group_data[selected_stocks].min().min(),
+                'max-column': group_data[selected_stocks].max().max(),
+                'start-column': group_data[selected_stocks].iloc[0, :].min(),
+                'end-column': group_data[selected_stocks].iloc[-1, :].max(),
+                'mean-column': group_data[selected_stocks].mean().mean(),
+                'std-dev-column': group_data[selected_stocks].std().mean()
+            }
+            data.append(row_data)
 
         # Create the figure for the graph
     fig = {'data': traces, 'layout': layout}
