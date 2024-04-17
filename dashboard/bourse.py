@@ -111,6 +111,17 @@ bollinger_switch = html.Div(children=[
     )
 ])
 
+trix_indicator_switch = html.Div(children=[
+    dcc.Checklist(
+        id='trix-indicator-switch',
+        options=[
+            {'label': 'Show TRIX Indicator', 'value': 'trix'}
+        ],
+        value=[],
+        style={'padding': "10px", 'margin-right': '10px'}
+    )
+])
+
 date_picker = html.Div(children=[
     dcc.DatePickerRange(
         id='date-picker-range',
@@ -138,6 +149,7 @@ whole_selector = html.Div(children=[
     # Div Droite
     html.Div(children=[
         bollinger_switch,
+        trix_indicator_switch,
     ], style={'flex': 1, 'padding': '10px'}),
 
 ], style={'display': 'flex', 'flexDirection': 'row', 'justifyContent': 'space-between'})
@@ -196,10 +208,11 @@ app.layout = html.Div([
     Input('stock-selector', 'value'),
     Input('visualization-type', 'value'),
     Input('bollinger-switch', 'value'),
+    Input('trix-indicator-switch', 'value'),
     Input('date-picker-range', 'start_date'),
     Input('date-picker-range', 'end_date')
 )
-def update_graph(selected_stocks, visualization_type, bollinger_switch_value, start_date, end_date):
+def update_graph(selected_stocks, visualization_type, bollinger_switch_value, trix_switch_value,start_date, end_date):
     traces = []
     data = []
     filtered_data = stock_data[(pd.to_datetime(stock_data['Date']) >= start_date) & (pd.to_datetime(stock_data['Date']) <= end_date)]
@@ -218,7 +231,7 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, st
                                          low=filtered_data[f'{current_stock}.Low'],
                                          close=filtered_data[f'{current_stock}.Close'],
                                          name=current_stock))
-
+        # bollinger to analyse volatility over time
         if 'bollinger' in bollinger_switch_value:
             # https://fr.wikipedia.org/wiki/Bandes_de_Bollinger
             mean = filtered_data[current_stock].rolling(window=20).mean()
@@ -255,8 +268,15 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, st
                                      fillcolor='rgba(0,0,255,0.1)',
                                      line=dict(color='rgba(0,0,255,0)'),
                                      name=f'{current_stock} Bollinger\'s Band Area'))
+        if 'trix' in trix_switch_value:
+            trix_data = filtered_data.copy()
+            trix_data[f'{current_stock}.TRIX'] = calculate_trix(trix_data, current_stock, 14)
 
-
+            traces.append(go.Scatter(x=trix_data['Date'],
+                                     y=trix_data[f'{current_stock}.TRIX'],
+                                     mode='lines',
+                                     line=dict(color='green', dash='dot'),
+                                     name=f'{current_stock} TRIX'))
 
     layout = go.Layout(title='Stock Prices', xaxis=dict(title='Date'), yaxis=dict(title='Price'))
 
@@ -280,6 +300,16 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, st
 
     return fig, data
 
+def calculate_trix(data, current_stock, period):
+    # Exponential Moving Average (EMA)
+    ema = data[f'{current_stock}.Close'].ewm(span=period, min_periods=period).mean()
+
+    # Rate of change of EMA
+    roc = ema.pct_change()
+
+    trix = roc.ewm(span=period, min_periods=period).mean() * 100
+
+    return trix
 
 if __name__ == '__main__':
     app.run(debug=True)
