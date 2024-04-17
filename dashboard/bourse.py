@@ -1,11 +1,9 @@
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * IMPORTS * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
-import dash.exceptions
 import sqlalchemy
 import pandas as pd
 import numpy as np
 from dash import Dash, html, dcc, callback, Output, Input, dash_table
 import plotly.graph_objs as go
-from datetime import date
 
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * \/ \/ \/ \/ BEFORE MODIFS \/ \/ \/ \/ * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
 """
@@ -52,10 +50,12 @@ timestamps = np.repeat(dates[:num_days], num_data_points_per_day)
 stock_data = pd.DataFrame({
     'Date': timestamps,
     'Stock_A': np.random.normal(100, 10, len(timestamps)),
-    'Stock_B': np.random.normal(100, 10, len(timestamps))
+    'Stock_B': np.random.normal(100, 10, len(timestamps)),
+    'Stock_C': np.random.normal(100, 10, len(timestamps)),
+    'Stock_D': np.random.normal(100, 10, len(timestamps))
 })
 
-for stock in ['Stock_A', 'Stock_B']:
+for stock in ['Stock_A', 'Stock_B', 'Stock_C', 'Stock_D']:
     stock_data[f'{stock}.Open'] = stock_data.groupby(stock_data['Date'].dt.date)[stock].transform('first')
     stock_data[f'{stock}.High'] = stock_data.groupby(stock_data['Date'].dt.date)[stock].transform('max')
     stock_data[f'{stock}.Low'] = stock_data.groupby(stock_data['Date'].dt.date)[stock].transform('min')
@@ -188,6 +188,7 @@ app.layout = html.Div([
 
 
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * CALLBACKS * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
+
 # TODO : ajouter un callback pour chaque action utilisateur.
 @callback(
     Output('stock-graph', 'figure'),
@@ -226,16 +227,36 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, st
             upper_band = mean + (2 * std)
             lower_band = mean - (2 * std)
 
+            # trace bollinger bands
             traces.append(go.Scatter(x=filtered_data['Date'],
                                      y=upper_band, mode='lines',
                                      name=f'{current_stock} Bollinger\'s Upper Band',
                                      line=dict(color='blue', dash='dash')))
-
+            traces.append(go.Scatter(x=filtered_data['Date'],
+                                     y=mean,
+                                     mode='lines',
+                                     name=f'{current_stock} Bollinger\'s Central Band',
+                                     line=dict(color='black', dash='dash')))
             traces.append(go.Scatter(x=filtered_data['Date'],
                                      y=lower_band,
                                      mode='lines',
                                      name=f'{current_stock} Bollinger\'s Lower Band',
                                      line=dict(color='red', dash='dash')))
+            # fill space between upper and lower bands
+            traces.append(go.Scatter(x=filtered_data['Date'],
+                                     y=upper_band,
+                                     mode='lines',
+                                     line=dict(color='rgba(0,0,255,0)'),
+                                     showlegend=False))
+            traces.append(go.Scatter(x=filtered_data['Date'],
+                                     y=lower_band,
+                                     mode='lines',
+                                     fill='tonexty',
+                                     fillcolor='rgba(0,0,255,0.1)',
+                                     line=dict(color='rgba(0,0,255,0)'),
+                                     name=f'{current_stock} Bollinger\'s Band Area'))
+
+
 
     layout = go.Layout(title='Stock Prices', xaxis=dict(title='Date'), yaxis=dict(title='Price'))
 
