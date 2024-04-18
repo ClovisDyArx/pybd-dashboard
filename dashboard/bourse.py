@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from dash import Dash, html, dcc, callback, Output, Input, dash_table
 import plotly.graph_objs as go
+from datetime import datetime
 
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * \/ \/ \/ \/ BEFORE MODIFS \/ \/ \/ \/ * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
 """
@@ -78,16 +79,26 @@ server = app.server
 
 
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * COMPONENTS * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
-# TODO : découper les parties en composants pour améliorer la lisibilité du code.
 
+# Colors
+colors = {
+    'background': '#FFF4F2',
+    'text': '#333333',
+    'accent': '#FFC0CB',
+    'border': '#DDDDDD'
+}
+# Selectors
 stock_selector = html.Div(children=[
+    html.Label('Select stocks:', style={'font-weight': 'bold', 'color': colors['text']}),
     dcc.Dropdown(
         id='stock-selector',
         options=[{'label': stock, 'value': stock} for stock in pure_stock_columns[1:]],
         value=[pure_stock_columns[1]],
-        multi=True
+        multi=True,
+        style={'width': '100%', 'background-color': colors['accent'],
+                'box-shadow': '0px 0px 10px rgba(0, 0, 0, 0.1)', 'color': colors['text']},
     )
-])
+], style={'width': '45%'})
 
 graph_selector = html.Div(children=[
     dcc.Dropdown(
@@ -96,10 +107,12 @@ graph_selector = html.Div(children=[
             {'label': 'Lines', 'value': 'lines'},
             {'label': 'Candlesticks', 'value': 'candlesticks'}
         ],
-        value='lines'  # valeur par défaut
+        value='lines',  # valeur par défaut
+        style={'background-color': colors['accent'], 'color': colors['text']}
     )
 ])
 
+# Switches
 bollinger_switch = html.Div(children=[
     dcc.Checklist(
         id='bollinger-switch',
@@ -107,7 +120,7 @@ bollinger_switch = html.Div(children=[
             {'label': 'Show Bollinger Bands', 'value': 'bollinger'}
         ],
         value=[],
-        style={'padding': "10px", 'margin-right': '10px'}
+        style={'margin-top': '10px', 'color': colors['text']}
     )
 ])
 
@@ -118,41 +131,23 @@ trix_indicator_switch = html.Div(children=[
             {'label': 'Show TRIX Indicator', 'value': 'trix'}
         ],
         value=[],
-        style={'padding': "10px", 'margin-right': '10px'}
+        style={'margin-top': '10px', 'color': colors['text']}
     )
 ])
 
+# Date picker
 date_picker = html.Div(children=[
+    html.Label('Select date range:', style={'font-weight': 'bold', 'color': colors['text']}),
     dcc.DatePickerRange(
         id='date-picker-range',
         min_date_allowed=min(stock_data['Date']),
         max_date_allowed=max(stock_data['Date']),
         start_date=min(stock_data['Date']),
         end_date=max(stock_data['Date']),
-        display_format='YYYY-MM-DD'
+        display_format='YYYY-MM-DD',
+        style={'width': '100%', 'color': colors['accent']}
     )
-])
-
-whole_selector = html.Div(children=[
-    # Div Gauche
-    html.Div(children=[
-        html.Label('Select stock to display:', style={'font-weight': 'bold'}),
-        stock_selector,
-    ], style={'flex': 1, 'padding': "10px 10px 5px 10px"}),
-
-    # Div Milieu
-    html.Div(children=[
-        html.Label('Select visualization type:', style={'font-weight': 'bold'}),
-        graph_selector,
-    ], style={'flex': 1, 'padding': '10px'}),
-
-    # Div Droite
-    html.Div(children=[
-        bollinger_switch,
-        trix_indicator_switch,
-    ], style={'flex': 1, 'padding': '10px'}),
-
-], style={'display': 'flex', 'flexDirection': 'row', 'justifyContent': 'space-between'})
+], style={'overflow': 'hidden', 'flex': 1, 'margin-left': 'auto'})
 
 stock_info_table = dash_table.DataTable(
     id='stock-table',
@@ -167,37 +162,67 @@ stock_info_table = dash_table.DataTable(
     ],
     page_size=10,
     data=[],
-    style_header={'textAlign': 'center'}
+    style_header={'text-align': 'center', 'background-color': colors['accent']},
 )
 
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * APP LAYOUT * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
-# TODO : compléter le layout.
 
+app.layout = html.Div(children=[
+    # Titre
+    html.H1("Stock Dashboard", style={'text-align': 'center', 'color': colors['text'], 'margin': '20px'}),
 
-app.layout = html.Div([
-    # Div Haute
-    html.Div(children=[  # TODO
-        html.Label("Barre des tâches ?", style={"font-weight": 'bold', "font-size": '20px'}),
-        date_picker
-    ], style={'display': 'flex', 'flexDirection': 'column', 'background-color': '#f0f0f0', 'padding': '10px', 'width': '100%'}),
+    html.Div(children=[
+        html.Div(stock_selector, style={'flex': '1'}),
+        html.Div(date_picker, style={'flex': '1', 'margin-left': '20px'}),
+        ],
+        style={'height': '100px', 'display': 'flex', 'justify-content': 'space-between', 'align-items': 'center',
+            'padding-left': '30px', 'background-color': colors['background']}),
 
     # Div Basse
-    html.Div(children=[
-        # Div Gauche
-        html.Div(children=[
-            dcc.Graph(id='stock-graph'),
-            whole_selector,
+    html.Div(
+        children=[
+            # Div Gauche (Graph)
+            html.Div(
+                children=[
+                    dcc.Graph(id='stock-graph'),
+                ],
+                style={'flex': '70%', 'padding': '20px', 'background-color': '#f9f9f9', 'border-radius': '10px',
+                       'box-shadow': '0px 0px 20px rgba(0, 0, 0, 0.3)', 'width': '70%', 'margin-right': '10px'}
+            ),
 
-        ], style={'flex': 1, 'padding': '20px', 'background-color': '#f9f9f9', 'border-radius': '10px', 'box-shadow': '0px 0px 10px rgba(0, 0, 0, 0.1)'}),
+            # Div Droite (Settings)
+            html.Div(
+                children=[
+                    html.H4("Graph Settings", style={'color': colors['text'],
+                                                        'margin-bottom': '10px'}),
+                    html.Label("Select visualization type:", style={'font-weight': 'bold', 'color': colors['text']}),
+                    graph_selector,
+                    bollinger_switch,
+                    trix_indicator_switch,
+                ],
+                style={'flex': '30%', 'padding': '20px', 'background-color': colors['background'],
+                       'border-radius': '10px',
+                       'box-shadow': '0px 0px 20px rgba(0, 0, 0, 0.3)', 'width': '30%', 'margin-left': '10px'}
+            ),
+        ],
+        style={'display': 'flex', 'justify-content': 'space-between', 'align-items': 'stretch',
+               'margin': '20px', 'background-color': colors['background'], 'padding': '20px'}
+    ),
 
-        # Div Droite
-        html.Div(children=[
-            html.Label("Info on selected stocks"),
+    # Div Tableau
+    html.Div(
+        children=[
+            html.Label("Info on selected stocks", style={'fontWeight': 'bold', 'color': colors['text']}),
             stock_info_table,
-        ], style={'flex': 1, 'padding': '20px', 'background-color': '#f9f9f9', 'border-radius': '10px', 'box-shadow': '0px 0px 10px rgba(0, 0, 0, 0.1)'}),
-    ], style={'display': 'flex', 'flexDirection': 'row', 'justifyContent': 'space-between'}),
-])
-
+        ],
+        style={'margin': '30px', 'padding': '30px', 'background-color': colors['background'], 'border-radius': '10px',
+               'box-shadow': '0px 0px 20px rgba(0, 0, 0, 0.3)'}
+    )
+],
+    style={'background-color': colors['background'], 'font-family': 'Arial, sans-serif', 'color': colors['text'],
+           'border-radius': '15px', 'box-shadow': '0px 0px 20px rgba(0, 0, 0, 0.3)', 'margin': '20px',
+           'padding': '20px'}
+)
 
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * CALLBACKS * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
 
@@ -285,7 +310,7 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
     for date, group_data in grouped_data:
         if date in selected_dates:
             row_data = {
-                'date-column': date,
+                'date-column': date.strftime('%Y-%m-%d'),
                 'min-column': group_data[selected_stocks].min().min(),
                 'max-column': group_data[selected_stocks].max().max(),
                 'start-column': group_data[selected_stocks].iloc[0, :].min(),
@@ -300,6 +325,7 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
 
     return fig, data
 
+
 def calculate_trix(data, current_stock, period):
     # Exponential Moving Average (EMA)
     ema = data[f'{current_stock}.Close'].ewm(span=period, min_periods=period).mean()
@@ -310,6 +336,7 @@ def calculate_trix(data, current_stock, period):
     trix = roc.ewm(span=period, min_periods=period).mean() * 100
 
     return trix
+
 
 if __name__ == '__main__':
     app.run(debug=True)
