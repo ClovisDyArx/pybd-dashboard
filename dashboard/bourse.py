@@ -1,5 +1,4 @@
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * IMPORTS * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
-from logging import debug, warning
 
 import sqlalchemy
 import pandas as pd
@@ -266,7 +265,6 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
     data = []
     filtered_daystocks = df_daystocks[
         (df_daystocks['date_daystocks'] >= start_date) & (df_daystocks['date_daystocks'] <= end_date)]
-    warning(filtered_daystocks)
     for current_stock_symbol in selected_stocks:
         current_stock_id = df_companies[df_companies['symbol'] == current_stock_symbol]['id'].iloc[0]
         if visualization_type == 'lines':
@@ -339,7 +337,7 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
                                      line=dict(color='green', dash='dot'),
                                      name=f'{current_stock_symbol} TRIX'))
 
-    layout = go.Layout(title='Stock Prices', xaxis=dict(title='Date'), yaxis=dict(title='Price'))
+    layout = go.Layout(title='Stock Prices', xaxis=dict(title='Date'), yaxis=dict(title='Price', type='log'))
 
     # Grouped data for table
     grouped_data = df_daystocks.groupby(pd.Grouper(key='date_daystocks', freq='d'))
