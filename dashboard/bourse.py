@@ -73,8 +73,28 @@ DATABASE_URI = 'timescaledb://ricou:monmdp@db:5432/bourse'    # inside docker
 # DATABASE_URI = 'timescaledb://ricou:monmdp@localhost:5432/bourse'  # outisde docker
 engine = sqlalchemy.create_engine(DATABASE_URI)
 
+df_companies = pd.DataFrame()
+df_daystocks = pd.DataFrame()
+df_stocks = pd.DataFrame()
+
 with engine.connect() as connection:
-    print(pd.read_sql('SELECT * FROM companies;', connection))
+    df_companies = pd.read_sql('SELECT * FROM companies;', connection)
+    df_daystocks = pd.read_sql('SELECT * FROM daystocks;', connection)
+    df_stocks = pd.read_sql('SELECT * FROM stocks;', connection)
+
+df_companies = df_companies[['id', 'name', 'mid', 'symbol']].copy()
+df_daystocks.rename(columns={"cid": "id", "date": "date_daystocks", "volume": "volume_daystocks"}, inplace=True)
+df_stocks.rename(columns={"cid": "id", "date": "date_stocks", "volume": "volume_stocks"}, inplace=True)
+
+df = df_stocks.merge(df_companies, how='left', on='id').copy()
+df = df.merge(df_daystocks, how='left', on='id').copy()
+df = df[['id', 'name', 'mid',
+         'symbol', 'date_stocks', 'value',
+         'volume_stocks', 'date_daystocks',
+         'open', 'close', 'high', 'low',
+         'volume_daystocks']].copy()  # rename to stock_data
+
+print(df)
 
 ext = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__,  title="Bourse", suppress_callback_exceptions=True, external_stylesheets=ext)
