@@ -162,9 +162,9 @@ def store_day(market, day, website):
     push_companies(companiz)
     push_daystocks(daystockz)
 
+
 if __name__ == '__main__':
     print(__file__)
-    store_day('amsterdam', '2020-08-05', 'boursorama')
-    #store_file("amsterdam 2020-01-01 13_12_01.528372.bz2", "boursorama")
-    #store_file("compA 2020-01-01 09:02:02.532411", "boursorama")
+    store_day('amsterdam', '2020-01-01', 'boursorama')
+    store_day('amsterdam', '2020-03-03', 'boursorama')
     print("Done")

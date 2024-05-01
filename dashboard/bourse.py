@@ -1,10 +1,10 @@
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * IMPORTS * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
 import sqlalchemy
 import pandas as pd
-import numpy as np
 from dash import Dash, html, dcc, callback, Output, Input, dash_table
 import plotly.graph_objs as go
-from datetime import datetime
+import datetime
+import time
 
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * \/ \/ \/ \/ BEFORE MODIFS \/ \/ \/ \/ * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
 """
@@ -269,13 +269,14 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
     filtered_data = df_daystocks[
         (df_daystocks['date_daystocks'] >= start_date) & (df_daystocks['date_daystocks'] <= end_date)]
 
-    for current_stock in selected_stocks:
+    for current_stock_symbol in selected_stocks:
+        current_stock_id = df_companies[df_companies['symbol'] == current_stock_symbol]['id'].iloc[0]
         if visualization_type == 'lines':
-            stock_data = df_stocks[df_stocks['symbol'] == current_stock]
+            stock_data = df_stocks[df_stocks['id'] == current_stock_id]
             traces.append(go.Scatter(x=stock_data['date_stocks'],
                                      y=stock_data['value'],
                                      mode='lines',
-                                     name=current_stock))
+                                     name=current_stock_symbol))
 
         elif visualization_type == 'candlesticks':
             traces.append(go.Candlestick(x=filtered_data['date_daystocks'],
@@ -283,11 +284,12 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
                                          high=filtered_data['high'],
                                          low=filtered_data['low'],
                                          close=filtered_data['close'],
-                                         name=current_stock))
+                                         name=current_stock_symbol))
 
         # Bollinger bands
         if 'bollinger' in bollinger_switch_value:
-            stock_data = df_stocks[df_stocks['symbol'] == current_stock]
+            current_stock_id = df_companies[df_companies['symbol'] == current_stock_symbol]['id'].iloc[0]
+            stock_data = df_stocks[df_stocks['id'] == current_stock_id]
             mean = stock_data['value'].rolling(window=20).mean()
             std = stock_data['value'].rolling(window=20).std()
 
@@ -298,17 +300,17 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
             traces.append(go.Scatter(x=stock_data['date_stocks'],
                                      y=upper_band,
                                      mode='lines',
-                                     name=f'{current_stock} Bollinger\'s Upper Band',
+                                     name=f'{current_stock_symbol} Bollinger\'s Upper Band',
                                      line=dict(color='blue', dash='dash')))
             traces.append(go.Scatter(x=stock_data['date_stocks'],
                                      y=mean,
                                      mode='lines',
-                                     name=f'{current_stock} Bollinger\'s Central Band',
+                                     name=f'{current_stock_symbol} Bollinger\'s Central Band',
                                      line=dict(color='black', dash='dash')))
             traces.append(go.Scatter(x=stock_data['date_stocks'],
                                      y=lower_band,
                                      mode='lines',
-                                     name=f'{current_stock} Bollinger\'s Lower Band',
+                                     name=f'{current_stock_symbol} Bollinger\'s Lower Band',
                                      line=dict(color='red', dash='dash')))
             # Fill space between upper and lower bands
             traces.append(go.Scatter(x=stock_data['date_stocks'],
@@ -322,33 +324,38 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
                                      fill='tonexty',
                                      fillcolor='rgba(0,0,255,0.1)',
                                      line=dict(color='rgba(0,0,255,0)'),
-                                     name=f'{current_stock} Bollinger\'s Band Area'))
+                                     name=f'{current_stock_symbol} Bollinger\'s Band Area'))
 
         # TRIX indicator
         if 'trix' in trix_switch_value:
             trix_data = filtered_data.copy()
-            trix_data[f'{current_stock}.TRIX'] = calculate_trix(trix_data, current_stock, 14)
+            trix_data[f'{current_stock_symbol}.TRIX'] = calculate_trix(trix_data, current_stock_symbol, 14, df_companies)
 
             traces.append(go.Scatter(x=trix_data['date_daystocks'],
-                                     y=trix_data[f'{current_stock}.TRIX'],
+                                     y=trix_data[f'{current_stock_symbol}.TRIX'],
                                      mode='lines',
                                      line=dict(color='green', dash='dot'),
-                                     name=f'{current_stock} TRIX'))
+                                     name=f'{current_stock_symbol} TRIX'))
 
     layout = go.Layout(title='Stock Prices', xaxis=dict(title='Date'), yaxis=dict(title='Price'))
 
     # Grouped data for table
     grouped_data = df_daystocks.groupby(pd.Grouper(key='date_daystocks', freq='d'))
     for date, group_data in grouped_data:
-        if start_date <= date <= end_date:
+        if pd.Timestamp(start_date) <= date <= pd.Timestamp(end_date):
+            date_string = date.strftime('%Y-%m-%d')
+            df_stocks['date_stocks_simplified'] = df_stocks['date_stocks'].dt.strftime('%Y-%m-%d')
+            filtered_stocks = df_stocks[df_stocks['date_stocks_simplified'] == date_string]
+            merged_data = pd.merge(group_data, filtered_stocks, on='id')
+
             row_data = {
-                'date-column': date.strftime('%Y-%m-%d'),
-                'min-column': group_data[selected_stocks].min().min(),
-                'max-column': group_data[selected_stocks].max().max(),
-                'start-column': group_data[selected_stocks].iloc[0, :].min(),
-                'end-column': group_data[selected_stocks].iloc[-1, :].max(),
-                'mean-column': group_data[selected_stocks].mean().mean(),
-                'std-dev-column': group_data[selected_stocks].std().mean()
+                'date-column': date_string,
+                'min-column': merged_data['low'].min(),
+                'max-column': merged_data['high'].max(),
+                'start-column': merged_data['open'].iloc[0],
+                'end-column': merged_data['close'].iloc[-1],
+                'mean-column': merged_data['value'].mean(),
+                'std-dev-column': merged_data['value'].std()
             }
             data.append(row_data)
 
@@ -357,9 +364,9 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
     return fig, data
 
 
-def calculate_trix(data, current_stock, period):
+def calculate_trix(data, current_stock, period, filsdepute):
     # Exponential Moving Average (EMA) of close prices
-    ema_close = data[data['symbol'] == current_stock]['close'].ewm(span=period, min_periods=period).mean()
+    ema_close = data[filsdepute['symbol'] == current_stock]['close'].ewm(span=period, min_periods=period).mean()
 
     # Rate of change of EMA of close prices
     roc_ema_close = ema_close.pct_change()
