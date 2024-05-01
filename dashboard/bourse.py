@@ -73,6 +73,9 @@ DATABASE_URI = 'timescaledb://ricou:monmdp@db:5432/bourse'    # inside docker
 # DATABASE_URI = 'timescaledb://ricou:monmdp@localhost:5432/bourse'  # outisde docker
 engine = sqlalchemy.create_engine(DATABASE_URI)
 
+with engine.connect() as connection:
+    print(pd.read_sql('SELECT * FROM companies;', connection))
+
 ext = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__,  title="Bourse", suppress_callback_exceptions=True, external_stylesheets=ext)
 server = app.server

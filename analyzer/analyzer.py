@@ -76,10 +76,10 @@ def store_file(name, website):
     #    return
     if website.lower() == "boursorama":
         try:
-            df = pd.read_pickle("/home/bourse/data/boursorama/" + name)  # is this dir ok for you ?
+            df = pd.read_pickle("bourse/data/boursorama/" + name)  # is this dir ok for you ?
         except:
             year = name.split()[1].split("-")[0]
-            df = pd.read_pickle("/home/bourse/data/boursorama/" + year + "/" + name)
+            df = pd.read_pickle("bourse/data/boursorama/" + year + "/" + name)
         # to be finished
                 
         market = name.split(" ")
