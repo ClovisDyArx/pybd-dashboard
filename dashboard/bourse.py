@@ -364,9 +364,9 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
     return fig, data
 
 
-def calculate_trix(data, current_stock, period, filsdepute):
+def calculate_trix(data, current_stock, period, company):
     # Exponential Moving Average (EMA) of close prices
-    ema_close = data[filsdepute['symbol'] == current_stock]['close'].ewm(span=period, min_periods=period).mean()
+    ema_close = data[company['symbol'] == current_stock]['close'].ewm(span=period, min_periods=period).mean()
 
     # Rate of change of EMA of close prices
     roc_ema_close = ema_close.pct_change()
