@@ -3,6 +3,7 @@ import numpy as np
 import sklearn
 import time
 import datetime
+import os
 
 import timescaledb_model as tsdb
 
@@ -46,7 +47,7 @@ def store_companies(df, name_bourse, old_companiz=pd.DataFrame()):
     return old_companiz
     
 
-def store_stocks(df, timestamp_value, old_stockz):
+def store_stocks(df, timestamp_value, old_stockz=pd.DataFrame()):
     stockz = (
         df
         .loc[(df['last'] != 0) & (df['volume'] != 0)]
@@ -63,7 +64,12 @@ def store_stocks(df, timestamp_value, old_stockz):
         
     stockz.set_index('date', inplace=True)
     
-    return stockz
+    if old_stockz.empty:
+        return stockz
+    
+    old_stockz = pd.concat([old_stockz, stockz])
+    
+    return old_stockz
     
 def push_companies(companiz):
     db.df_write(companiz, "companies", chunksize=100000, index=True, commit=True)
@@ -76,10 +82,10 @@ def store_file(name, website):
     #    return
     if website.lower() == "boursorama":
         try:
-            df = pd.read_pickle("bourse/data/boursorama/" + name)  # is this dir ok for you ?
+            df = pd.read_pickle("/home/bourse/data/boursorama/" + name)  # is this dir ok for you ?
         except:
             year = name.split()[1].split("-")[0]
-            df = pd.read_pickle("bourse/data/boursorama/" + year + "/" + name)
+            df = pd.read_pickle("/home/bourse/data/boursorama/" + year + "/" + name)
         # to be finished
                 
         market = name.split(" ")
@@ -109,15 +115,18 @@ def store_file(name, website):
         stockz = store_stocks(df, timestamp_value)
         #print(stockz)
         push_stocks(stockz)
-                
-        # ====================[ DAYSTOCKS ]====================
         
         # ====================[ FILE_DONE ]====================
         
         db.execute(query="INSERT INTO file_done VALUES (%s);", args=(name,), commit=True)
+        
+def store_day(market, day):
+    files = os.listdir('/home/bourse/data/boursorama/2020')
+    files_to_store = [file for file in files if file.startswith(market + " " + day)]
 
 if __name__ == '__main__':
     print(__file__)
-    store_file("amsterdam 2020-01-01 13_12_01.528372.bz2", "boursorama")
+    print(store_day('amsterdam', '2020-01-01'))
+    #store_file("amsterdam 2020-01-01 13_12_01.528372.bz2", "boursorama")
     #store_file("compA 2020-01-01 09:02:02.532411", "boursorama")
     print("Done")
