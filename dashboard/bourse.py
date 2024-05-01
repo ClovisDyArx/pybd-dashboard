@@ -1,4 +1,6 @@
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * IMPORTS * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
+from logging import debug, warning
+
 import sqlalchemy
 import pandas as pd
 from dash import Dash, html, dcc, callback, Output, Input, dash_table
@@ -85,7 +87,8 @@ with engine.connect() as connection:
 df_companies = df_companies[['id', 'name', 'mid', 'symbol']].copy()
 df_daystocks.rename(columns={"cid": "id", "date": "date_daystocks", "volume": "volume_daystocks"}, inplace=True)
 df_stocks.rename(columns={"cid": "id", "date": "date_stocks", "volume": "volume_stocks"}, inplace=True)
-
+df_daystocks.sort_values(by='date_daystocks', inplace=True)
+df_stocks.sort_values(by='date_stocks', inplace=True)
 # df = df_stocks.merge(df_companies, how='left', on='id').copy()
 # df = df.merge(df_daystocks, how='left', on='id').copy()
 """df = df[['id', 'name', 'mid',
@@ -158,20 +161,16 @@ trix_indicator_switch = html.Div(children=[
         style={'margin-top': '10px', 'color': colors['text']}
     )
 ])
+date_picker = dcc.DatePickerRange(
+    id='date-picker-range',
+    min_date_allowed=min(df_daystocks['date_daystocks']),
+    max_date_allowed=max(df_daystocks['date_daystocks']),
+    start_date=min(df_daystocks['date_daystocks']),
+    end_date=max(df_daystocks['date_daystocks']),
+    display_format='YYYY-MM-DD',
+    style={'width': '100%', 'color': colors['accent']}
+)
 
-# Date picker
-date_picker = html.Div(children=[
-    html.Label('Select date range:', style={'font-weight': 'bold', 'color': colors['text']}),
-    dcc.DatePickerRange(
-        id='date-picker-range',
-        min_date_allowed=min(df_daystocks['date_daystocks']),
-        max_date_allowed=max(df_daystocks['date_daystocks']),
-        start_date=min(df_daystocks['date_daystocks']),
-        end_date=max(df_daystocks['date_daystocks']),
-        display_format='YYYY-MM-DD',
-        style={'width': '100%', 'color': colors['accent']}
-    )
-], style={'overflow': 'hidden', 'flex': 1, 'margin-left': 'auto'})
 
 
 stock_info_table = dash_table.DataTable(
@@ -265,31 +264,34 @@ app.layout = html.Div(children=[
 def update_graph(selected_stocks, visualization_type, bollinger_switch_value, trix_switch_value, start_date, end_date):
     traces = []
     data = []
-
-    filtered_data = df_daystocks[
+    filtered_daystocks = df_daystocks[
         (df_daystocks['date_daystocks'] >= start_date) & (df_daystocks['date_daystocks'] <= end_date)]
-
+    warning(filtered_daystocks)
     for current_stock_symbol in selected_stocks:
         current_stock_id = df_companies[df_companies['symbol'] == current_stock_symbol]['id'].iloc[0]
         if visualization_type == 'lines':
-            stock_data = df_stocks[df_stocks['id'] == current_stock_id]
+            filtered_dates = filtered_daystocks['date_daystocks'].dt.date
+            stock_data = df_stocks[(df_stocks['id'] == current_stock_id) &
+                                    (df_stocks['date_stocks'].dt.date.isin(filtered_dates))]
             traces.append(go.Scatter(x=stock_data['date_stocks'],
                                      y=stock_data['value'],
                                      mode='lines',
                                      name=current_stock_symbol))
 
         elif visualization_type == 'candlesticks':
-            traces.append(go.Candlestick(x=filtered_data['date_daystocks'],
-                                         open=filtered_data['open'],
-                                         high=filtered_data['high'],
-                                         low=filtered_data['low'],
-                                         close=filtered_data['close'],
+            traces.append(go.Candlestick(x=filtered_daystocks['date_daystocks'],
+                                         open=filtered_daystocks['open'],
+                                         high=filtered_daystocks['high'],
+                                         low=filtered_daystocks['low'],
+                                         close=filtered_daystocks['close'],
                                          name=current_stock_symbol))
 
         # Bollinger bands
         if 'bollinger' in bollinger_switch_value:
             current_stock_id = df_companies[df_companies['symbol'] == current_stock_symbol]['id'].iloc[0]
-            stock_data = df_stocks[df_stocks['id'] == current_stock_id]
+            filtered_dates = filtered_daystocks['date_daystocks'].dt.date
+            stock_data = df_stocks[(df_stocks['id'] == current_stock_id) &
+                                   (df_stocks['date_stocks'].dt.date.isin(filtered_dates))]
             mean = stock_data['value'].rolling(window=20).mean()
             std = stock_data['value'].rolling(window=20).std()
 
@@ -328,7 +330,7 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
 
         # TRIX indicator
         if 'trix' in trix_switch_value:
-            trix_data = filtered_data.copy()
+            trix_data = filtered_daystocks.copy()
             trix_data[f'{current_stock_symbol}.TRIX'] = calculate_trix(trix_data, current_stock_symbol, 14, df_companies)
 
             traces.append(go.Scatter(x=trix_data['date_daystocks'],
@@ -342,7 +344,7 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
     # Grouped data for table
     grouped_data = df_daystocks.groupby(pd.Grouper(key='date_daystocks', freq='d'))
     for date, group_data in grouped_data:
-        if pd.Timestamp(start_date) <= date <= pd.Timestamp(end_date):
+        if pd.Timestamp(start_date).day <= date.day <= pd.Timestamp(end_date).day:
             date_string = date.strftime('%Y-%m-%d')
             df_stocks['date_stocks_simplified'] = df_stocks['date_stocks'].dt.strftime('%Y-%m-%d')
             filtered_stocks = df_stocks[df_stocks['date_stocks_simplified'] == date_string]
