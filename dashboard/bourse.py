@@ -217,11 +217,12 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
                                      name=current_stock_symbol))
 
         elif visualization_type == 'candlesticks':
-            traces.append(go.Candlestick(x=filtered_daystocks['date_daystocks'],
-                                         open=filtered_daystocks['open'],
-                                         high=filtered_daystocks['high'],
-                                         low=filtered_daystocks['low'],
-                                         close=filtered_daystocks['close'],
+            stock_data = filtered_daystocks[filtered_daystocks['id'] == current_stock_id]
+            traces.append(go.Candlestick(x=stock_data['date_daystocks'],
+                                         open=stock_data['open'],
+                                         high=stock_data['high'],
+                                         low=stock_data['low'],
+                                         close=stock_data['close'],
                                          name=current_stock_symbol))
 
         # Bollinger bands
@@ -284,7 +285,7 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
     for date, group_data in grouped_data:
         if pd.Timestamp(start_date).day <= date.day <= pd.Timestamp(end_date).day:
             date_string = date.day
-            filtered_stocks = df_stocks[df_stocks['date_stocks'].dt.date.day == date_string]
+            filtered_stocks = df_stocks[df_stocks['date_stocks'].dt.day == date_string]
             merged_data = pd.merge(group_data, filtered_stocks, on='id')
             row_data = {
                 'date-column': date_string,
