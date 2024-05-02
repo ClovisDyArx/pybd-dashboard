@@ -120,7 +120,9 @@ stock_info_table = dash_table.DataTable(
 
 app.layout = html.Div(children=[
     # Title
-    html.H1("Stock Dashboard", style={'text-align': 'center', 'color': colors['text'], 'margin': '20px'}),
+    html.H1("Stock Dashboard", style={'text-align': 'center', 'color': colors['text'], 'margin': '20px',
+                                      'font-family': 'Avantgarde, TeX Gyre Adventor, URW Gothic L, sans-serif',
+                                      'font-weight': 'bold'}),
 
     html.Div(children=[
         html.Div(stock_selector, style={'flex': '1'}),
