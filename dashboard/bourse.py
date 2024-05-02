@@ -1,4 +1,5 @@
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * IMPORTS * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
+from logging import warning
 
 import sqlalchemy
 import pandas as pd
@@ -76,18 +77,19 @@ engine = sqlalchemy.create_engine(DATABASE_URI)
 
 df_companies = pd.DataFrame()
 df_daystocks = pd.DataFrame()
-df_stocks = pd.DataFrame()
+# df_stocks = pd.DataFrame()
 
 with engine.connect() as connection:
     df_companies = pd.read_sql('SELECT * FROM companies;', connection)
     df_daystocks = pd.read_sql('SELECT * FROM daystocks;', connection)
-    df_stocks = pd.read_sql('SELECT * FROM stocks;', connection)
+    # df_stocks = pd.read_sql('SELECT * FROM stocks;', connection)
 
 df_companies = df_companies[['id', 'name', 'mid', 'symbol']].copy()
 df_daystocks.rename(columns={"cid": "id", "date": "date_daystocks", "volume": "volume_daystocks"}, inplace=True)
-df_stocks.rename(columns={"cid": "id", "date": "date_stocks", "volume": "volume_stocks"}, inplace=True)
+# df_stocks.rename(columns={"cid": "id", "date": "date_stocks", "volume": "volume_stocks"}, inplace=True)
 df_daystocks.sort_values(by='date_daystocks', inplace=True)
-df_stocks.sort_values(by='date_stocks', inplace=True)
+
+# df_stocks.sort_values(by='date_stocks', inplace=True)
 # df = df_stocks.merge(df_companies, how='left', on='id').copy()
 # df = df.merge(df_daystocks, how='left', on='id').copy()
 """df = df[['id', 'name', 'mid',
@@ -263,6 +265,15 @@ app.layout = html.Div(children=[
 def update_graph(selected_stocks, visualization_type, bollinger_switch_value, trix_switch_value, start_date, end_date):
     traces = []
     data = []
+    selected_stock_ids = [df_companies[df_companies['symbol'] == stock]['id'].iloc[0] for stock in selected_stocks]
+    with engine.connect() as connection:
+        stock_condition = f"cid IN ({','.join(map(str, selected_stock_ids))})"
+        query = f"SELECT * FROM stocks WHERE {stock_condition}"
+        df_stocks = pd.read_sql(query, connection)
+        df_stocks.rename(columns={"cid": "id", "date": "date_stocks", "volume": "volume_stocks"}, inplace=True)
+        df_stocks.sort_values(by='date_stocks', inplace=True)
+
+
     filtered_daystocks = df_daystocks[
         (df_daystocks['date_daystocks'] >= start_date) & (df_daystocks['date_daystocks'] <= end_date)]
     for current_stock_symbol in selected_stocks:
@@ -286,7 +297,7 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
 
         # Bollinger bands
         if 'bollinger' in bollinger_switch_value:
-            current_stock_id = df_companies[df_companies['symbol'] == current_stock_symbol]['id'].iloc[0]
+            """current_stock_id = df_companies[df_companies['symbol'] == current_stock_symbol]['id'].iloc[0]"""
             filtered_dates = filtered_daystocks['date_daystocks'].dt.date
             stock_data = df_stocks[(df_stocks['id'] == current_stock_id) &
                                    (df_stocks['date_stocks'].dt.date.isin(filtered_dates))]
@@ -347,7 +358,6 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
             df_stocks['date_stocks_simplified'] = df_stocks['date_stocks'].dt.strftime('%Y-%m-%d')
             filtered_stocks = df_stocks[df_stocks['date_stocks_simplified'] == date_string]
             merged_data = pd.merge(group_data, filtered_stocks, on='id')
-
             row_data = {
                 'date-column': date_string,
                 'min-column': merged_data['low'].min(),
