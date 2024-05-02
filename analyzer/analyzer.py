@@ -17,10 +17,13 @@ def last_to_float(last):
     return float(last.split('(')[0].replace(' ', ''))
 
 def get_cid(symbol, companies):
-    cid = companies.index[companies['symbol'] == symbol].tolist()[0]
-    return cid
+    return companies.index[companies['symbol'] == symbol].tolist()[0]
 
 def store_companies(df, name_bourse, old_companiz=pd.DataFrame()):
+    if old_companiz.empty:
+        companies_data = db.execute(query="SELECT id, name, mid, symbol, symbol_nf, isin, reuters, boursorama, pea, sector FROM companies")
+        old_companiz = pd.DataFrame(companies_data, columns=['id', 'name', 'mid', 'symbol', 'symbol_nf', 'isin', 'reuters', 'boursorama', 'pea', 'sector'])
+       
     companiz = (
         df
         .drop(columns=['last'])
@@ -30,8 +33,11 @@ def store_companies(df, name_bourse, old_companiz=pd.DataFrame()):
     companiz.reset_index(drop=True, inplace=True)
     companiz['id'] = companiz.index
     companiz.set_index('id', inplace=True)
-
-    companiz['mid'] = db.execute(query="SELECT id FROM markets WHERE alias = %s", args=(name_bourse,))[0][0]
+    
+    if name_bourse == 'pmapme':
+        companiz['mid'] = 0
+    else:
+        companiz['mid'] = db.execute(query="SELECT id FROM markets WHERE alias = %s", args=(name_bourse,))[0][0]
     companiz['symbol_nf'] = 'idk'
     companiz['isin'] = 'idk'
     companiz['reuters'] = 'idk'
@@ -55,31 +61,32 @@ def store_companies(df, name_bourse, old_companiz=pd.DataFrame()):
     
 
 def store_stocks(df, timestamp_value, companies, old_stockz=pd.DataFrame()):
-    stockz = (
-        df
-        .loc[(df['last'] != 0) & (df['volume'] != 0)]
-        .rename(columns={'last': 'value'})
-        .drop(columns=['name'])
-    )
-
-    stockz.reset_index(drop=True, inplace=True)
-        
+    # Filter rows where 'last' and 'volume' are not zero
+    df_filtered = df[(df['last'] != 0) & (df['volume'] != 0)]
+    
+    # Rename 'last' column to 'value' and drop 'name' column
+    stockz = df_filtered.rename(columns={'last': 'value'}).drop(columns=['name'])
+    
+    # Assign timestamp value to 'date' column
     stockz['date'] = timestamp_value
-    stockz['cid'] = 0
-    stockz['cid'] = stockz['symbol'].apply(lambda x: get_cid(x, companies))
-    stockz.drop(columns=['symbol'], inplace = True)
-        
+    
+    # Map 'symbol' to 'cid' using companies DataFrame
+    stockz['cid'] = stockz['symbol'].map(lambda x: get_cid(x, companies))
+    
+    # Drop 'symbol' column
+    stockz.drop(columns=['symbol'], inplace=True)
+    
+    # Set 'date' as the index
     stockz.set_index('date', inplace=True)
     
-    if old_stockz.empty:
-        return stockz
+    # Concatenate with old_stockz if it's not empty
+    if not old_stockz.empty:
+        stockz = pd.concat([old_stockz, stockz])
     
-    old_stockz = pd.concat([old_stockz, stockz])
-    
-    return old_stockz
+    return stockz
     
 def push_companies(companiz):
-    db.df_write(companiz, "companies", chunksize=100000, index=True, commit=True)
+    db.df_write(companiz, "companies", chunksize=100000, index=True, commit=True, if_exists='replace')
     
 def push_stocks(stockz):
     db.df_write(stockz, "stocks", chunksize=100000, index=True, commit=True)
@@ -87,7 +94,7 @@ def push_stocks(stockz):
 def push_daystocks(daystockz):
     db.df_write(daystockz, "daystocks", chunksize=100000, index=True, commit=True)
 
-def store_file(name, website, companiz, stockz):
+def store_file(name, website, companiz, stockz, daystockz):
     #if db.is_file_done():#name):
     #    return
     if website.lower() == "boursorama":
@@ -102,6 +109,7 @@ def store_file(name, website, companiz, stockz):
         name_bourse = market[0]
         date = market[1] + " " + market[2].split('.')[0]
         timestamp_value = datetime.datetime.strptime(date, '%Y-%m-%d %H_%M_%S')
+        day_timestamp_value = datetime.datetime.strptime(date.split(' ')[0], '%Y-%m-%d')
         
         # Prétraitements sur df
         
@@ -109,25 +117,42 @@ def store_file(name, website, companiz, stockz):
         
         # =====================[ MARKET ]=====================
         
-        #dfshit = df.copy()
-        #dfshit['symbol'] = dfshit['symbol'].apply(tempfunc)
         companiz = store_companies(df, name_bourse, companiz)
-        #companiz = store_companies(dfshit, name_bourse, companiz)
-        
-        #print(companiz)
-        #push_companies(companiz)
         
         # =====================[ STOCKS ]=====================
         
         stockz = store_stocks(df, timestamp_value, companiz.copy(), stockz)
-        #print(stockz)
-        #push_stocks(stockz)
         
+        # ====================[ DAYSTOCKS ]====================
+        
+        if daystockz.empty:
+            daystockz = (
+                stockz
+                .rename(columns={'value': 'open'})
+            )
+            
+            daystockz['close'] = daystockz['open']
+            daystockz['high'] = daystockz['open']
+            daystockz['low'] = daystockz['open']
+        else:
+            daystockz = daystockz.reset_index().set_index('cid')
+            stockz_copy = stockz.copy().reset_index().set_index('cid')
+            stockz_copy = stockz_copy[stockz_copy['date'] == timestamp_value]
+            daystockz['close'] = stockz_copy['value']
+            for idx in daystockz.index:
+                if idx in stockz_copy.index:
+                    if daystockz.loc[idx, 'high'] < stockz_copy.loc[idx, 'value']:
+                        daystockz.loc[idx, 'high'] = stockz_copy.loc[idx, 'value']
+                    if daystockz.loc[idx, 'low'] > stockz_copy.loc[idx, 'value']:
+                        daystockz.loc[idx, 'low'] = stockz_copy.loc[idx, 'value']
+            daystockz['date'] = day_timestamp_value
+            daystockz = daystockz.reset_index().set_index('date')
+
         # ====================[ FILE_DONE ]====================
         
-        #db.execute(query="INSERT INTO file_done VALUES (%s);", args=(name,), commit=True)
+        db.execute(query="INSERT INTO file_done VALUES (%s);", args=(name,), commit=True)
         
-        return companiz, stockz
+        return companiz, stockz, daystockz
 
 def resample_group(df):
         return df.resample('D').agg({
@@ -144,27 +169,61 @@ def store_daystocks(stockz):
     daystockz.set_index('date', inplace=True)
     return daystockz
 
-def store_day(market, day, website):
-    files = os.listdir('/home/bourse/data/boursorama/2020')
+def store_day(market, day, website, year, files):
     files_to_store = [file for file in files if file.startswith(market + " " + day)]
     
     companiz = pd.DataFrame()
     stockz = pd.DataFrame()
+    daystockz = pd.DataFrame()
     
     for fts in files_to_store:
-        companiz, stockz = store_file(fts, website, companiz, stockz)
+        companiz, stockz, daystockz = store_file(fts, website, companiz, stockz, daystockz)
     
     #companiz, stockz = store_file(files_to_store[0], website, companiz, stockz)
     
-    daystockz = store_daystocks(stockz)
+    #daystockz = store_daystocks(stockz)
 
     push_stocks(stockz)
     push_companies(companiz)
     push_daystocks(daystockz)
 
+def store_year_of_market(market, year, website, files):
+    files_to_store = [file for file in files if file.startswith(market)]
+    
+    days = set()
+    for file in files_to_store:
+        days.add(file.split(' ')[1])
+    
+    for day in days:
+        if day.startswith('2020-03-31') or day.startswith('2020-02-03'):
+            store_day(market, day, website, year, files_to_store)
+
+def store_year(year, website, file_done):
+    files = os.listdir('/home/bourse/data/boursorama/' + year)
+    files = [x for x in files if x not in file_done]
+    
+    markets = set()
+    for file in files:
+        markets.add(file.split(' ')[0])
+    
+    for market in markets:
+        store_year_of_market(market, year, website, files)
+        
+def store_everything(website):
+    files = os.listdir('/home/bourse/data/boursorama/')
+    file_done = db.execute(query="SELECT * FROM file_done")
+    file_dones = [f[0] for f in file_done]
+    
+    years = set()
+    for file in files:
+        years.add(file)
+    
+    #for year in years:
+        #store_year(year, website, file_dones)
+    store_year('2020', website, file_dones)
 
 if __name__ == '__main__':
     print(__file__)
-    store_day('amsterdam', '2020-01-01', 'boursorama')
-    store_day('amsterdam', '2020-03-03', 'boursorama')
+    store_everything('boursorama')
+    #store_year_of_market('amsterdam', '2020', 'boursorama')
     print("Done")
