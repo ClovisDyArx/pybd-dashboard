@@ -1,4 +1,6 @@
 # * -={#|#}=- * -={#|#}=- * -={#|#}=- * IMPORTS * -={#|#}=- * -={#|#}=- * -={#|#}=- * #
+from logging import warning
+
 import sqlalchemy
 import pandas as pd
 from dash import Dash, html, dcc, callback, Output, Input, dash_table
@@ -23,7 +25,7 @@ df_companies = df_companies[['id', 'name', 'mid', 'symbol']].copy()
 df_daystocks.rename(columns={"cid": "id", "date": "date_daystocks", "volume": "volume_daystocks"}, inplace=True)
 # df_stocks.rename(columns={"cid": "id", "date": "date_stocks", "volume": "volume_stocks"}, inplace=True)
 df_daystocks.sort_values(by='date_daystocks', inplace=True)
-
+warning("test")
 # df_stocks.sort_values(by='date_stocks', inplace=True)
 
 ext = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -281,9 +283,8 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
     grouped_data = df_daystocks.groupby(pd.Grouper(key='date_daystocks', freq='d'))
     for date, group_data in grouped_data:
         if pd.Timestamp(start_date).day <= date.day <= pd.Timestamp(end_date).day:
-            date_string = date.strftime('%Y-%m-%d')
-            df_stocks['date_stocks_simplified'] = df_stocks['date_stocks'].dt.strftime('%Y-%m-%d')
-            filtered_stocks = df_stocks[df_stocks['date_stocks_simplified'] == date_string]
+            date_string = date.day
+            filtered_stocks = df_stocks[df_stocks['date_stocks'].day == date_string]
             merged_data = pd.merge(group_data, filtered_stocks, on='id')
             row_data = {
                 'date-column': date_string,
