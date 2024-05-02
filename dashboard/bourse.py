@@ -284,7 +284,7 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
     for date, group_data in grouped_data:
         if pd.Timestamp(start_date).day <= date.day <= pd.Timestamp(end_date).day:
             date_string = date.day
-            filtered_stocks = df_stocks[df_stocks['date_stocks'].day == date_string]
+            filtered_stocks = df_stocks[df_stocks['date_stocks'].dt.date.day == date_string]
             merged_data = pd.merge(group_data, filtered_stocks, on='id')
             row_data = {
                 'date-column': date_string,
