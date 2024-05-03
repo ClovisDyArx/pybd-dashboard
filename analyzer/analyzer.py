@@ -195,7 +195,7 @@ def store_year_of_market(market, year, website, files):
         days.add(file.split(' ')[1])
     
     for day in days:
-        if day.startswith('2020-03-31') or day.startswith('2020-02-03'):
+        if day.startswith('2020-01'):
             store_day(market, day, website, year, files_to_store)
 
 def store_year(year, website, file_done):
