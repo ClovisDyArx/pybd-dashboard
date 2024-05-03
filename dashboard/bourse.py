@@ -283,20 +283,22 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
     # Grouped data for table
     grouped_data = df_daystocks.groupby(pd.Grouper(key='date_daystocks', freq='d'))
     for date, group_data in grouped_data:
-        if pd.Timestamp(start_date).day <= date.day <= pd.Timestamp(end_date).day:
-            date_string = date.day
-            filtered_stocks = df_stocks[df_stocks['date_stocks'].dt.day == date_string]
-            merged_data = pd.merge(group_data, filtered_stocks, on='id')
-            row_data = {
-                'date-column': date_string,
-                'min-column': merged_data['low'].min(),
-                'max-column': merged_data['high'].max(),
-                'start-column': merged_data['open'].iloc[0],
-                'end-column': merged_data['close'].iloc[-1],
-                'mean-column': merged_data['value'].mean(),
-                'std-dev-column': merged_data['value'].std()
-            }
-            data.append(row_data)
+        if pd.Timestamp(start_date).date() <= date.date() <= pd.Timestamp(end_date).date():
+            date_string = date.date()
+            filtered_stocks = df_stocks[df_stocks['date_stocks'].apply(lambda x: x.date()) == date_string]
+            
+            if not filtered_stocks.empty:
+                merged_data = pd.merge(group_data, filtered_stocks, on='id')
+                row_data = {
+                    'date-column': date_string,
+                    'min-column': merged_data['low'].min(),
+                    'max-column': merged_data['high'].max(),
+                    'start-column': merged_data['open'].iloc[0],
+                    'end-column': merged_data['close'].iloc[-1],
+                    'mean-column': merged_data['value'].mean(),
+                    'std-dev-column': merged_data['value'].std()
+                }
+                data.append(row_data)
 
     fig = {'data': traces, 'layout': layout}
 
