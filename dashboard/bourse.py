@@ -14,19 +14,14 @@ engine = sqlalchemy.create_engine(DATABASE_URI)
 
 df_companies = pd.DataFrame()
 df_daystocks = pd.DataFrame()
-# df_stocks = pd.DataFrame()
 
 with engine.connect() as connection:
     df_companies = pd.read_sql('SELECT * FROM companies;', connection)
     df_daystocks = pd.read_sql('SELECT * FROM daystocks;', connection)
-    # df_stocks = pd.read_sql('SELECT * FROM stocks;', connection)
 
 df_companies = df_companies[['id', 'name', 'mid', 'symbol']].copy()
 df_daystocks.rename(columns={"cid": "id", "date": "date_daystocks", "volume": "volume_daystocks"}, inplace=True)
-# df_stocks.rename(columns={"cid": "id", "date": "date_stocks", "volume": "volume_stocks"}, inplace=True)
 df_daystocks.sort_values(by='date_daystocks', inplace=True)
-warning("test")
-# df_stocks.sort_values(by='date_stocks', inplace=True)
 
 ext = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__, title="Bourse", suppress_callback_exceptions=True, external_stylesheets=ext)
@@ -79,11 +74,11 @@ bollinger_switch = html.Div(children=[
     )
 ])
 
-trix_indicator_switch = html.Div(children=[
+rsi_indicator_switch = html.Div(children=[
     dcc.Checklist(
-        id='trix-indicator-switch',
+        id='rsi-indicator-switch',
         options=[
-            {'label': 'Show TRIX Indicator', 'value': 'trix'}
+            {'label': 'Show RSI Indicator', 'value': 'rsi'}
         ],
         value=[],
         style={'margin-top': '10px', 'color': colors['text']}
@@ -153,7 +148,7 @@ app.layout = html.Div(children=[
                     html.Label("Select visualization type:", style={'font-weight': 'bold', 'color': colors['text']}),
                     graph_selector,
                     bollinger_switch,
-                    trix_indicator_switch,
+                    rsi_indicator_switch,
                 ],
                 style={'flex': '30%', 'padding': '20px', 'background-color': colors['background'],
                        'border-radius': '10px',
@@ -188,11 +183,11 @@ app.layout = html.Div(children=[
     Input('stock-selector', 'value'),
     Input('visualization-type', 'value'),
     Input('bollinger-switch', 'value'),
-    Input('trix-indicator-switch', 'value'),
+    Input('rsi-indicator-switch', 'value'),
     Input('date-picker-range', 'start_date'),
     Input('date-picker-range', 'end_date')
 )
-def update_graph(selected_stocks, visualization_type, bollinger_switch_value, trix_switch_value, start_date, end_date):
+def update_graph(selected_stocks, visualization_type, bollinger_switch_value, rsi_switch_value, start_date, end_date):
     traces = []
     data = []
     selected_stock_ids = [df_companies[df_companies['symbol'] == stock]['id'].iloc[0] for stock in selected_stocks]
@@ -266,56 +261,62 @@ def update_graph(selected_stocks, visualization_type, bollinger_switch_value, tr
                                      line=dict(color='rgba(0,0,255,0)'),
                                      name=f'{current_stock_symbol} Bollinger\'s Band Area'))
 
-        # TRIX indicator
-        if 'trix' in trix_switch_value:
-            trix_data = filtered_daystocks.copy()
-            trix_data[f'{current_stock_symbol}.TRIX'] = calculate_trix(trix_data, current_stock_symbol, 14,
-                                                                       df_companies)
+        # RSI indicator
+        if 'rsi' in rsi_switch_value:
+            stock_data = filtered_daystocks[filtered_daystocks['id'] == current_stock_id]
 
-            traces.append(go.Scatter(x=trix_data['date_daystocks'],
-                                     y=trix_data[f'{current_stock_symbol}.TRIX'],
+            rsi_data = stock_data.copy()
+            rsi_data[f'{current_stock_symbol}.RSI'] = calculate_rsi(rsi_data)
+
+            traces.append(go.Scatter(x=stock_data['date_daystocks'],
+                                     y=rsi_data[f'{current_stock_symbol}.RSI'],
                                      mode='lines',
                                      line=dict(color='green', dash='dot'),
-                                     name=f'{current_stock_symbol} TRIX'))
+                                     name=f'{current_stock_symbol}\'s RSI'))
 
     layout = go.Layout(title='Stock Prices', xaxis=dict(title='Date'), yaxis=dict(title='Price', type='log'))
 
     # Grouped data for table
-    grouped_data = df_daystocks.groupby(pd.Grouper(key='date_daystocks', freq='d'))
+    grouped_data = df_daystocks[df_daystocks['id'].isin(selected_stock_ids)].groupby(pd.Grouper(key='date_daystocks', freq='d'))
     for date, group_data in grouped_data:
         if pd.Timestamp(start_date).date() <= date.date() <= pd.Timestamp(end_date).date():
-            date_string = date.date()
-            filtered_stocks = df_stocks[df_stocks['date_stocks'].apply(lambda x: x.date()) == date_string]
-            
+            filtered_stocks = df_stocks[df_stocks['date_stocks'].apply(lambda x: x.date()) == date.date()]
             if not filtered_stocks.empty:
                 merged_data = pd.merge(group_data, filtered_stocks, on='id')
-                row_data = {
-                    'date-column': date_string,
-                    'min-column': merged_data['low'].min(),
-                    'max-column': merged_data['high'].max(),
-                    'start-column': merged_data['open'].iloc[0],
-                    'end-column': merged_data['close'].iloc[-1],
-                    'mean-column': merged_data['value'].mean(),
-                    'std-dev-column': merged_data['value'].std()
-                }
-                data.append(row_data)
+                if not merged_data.empty:
+                    row_data = {
+                        'date-column': date.date(),
+                        'min-column': merged_data['low'].min(),
+                        'max-column': merged_data['high'].max(),
+                        'start-column': merged_data['open'].iloc[0],
+                        'end-column': merged_data['close'].iloc[-1],
+                        'mean-column': merged_data['value'].mean(),
+                        'std-dev-column': merged_data['value'].std()
+                    }
+                    data.append(row_data)
 
     fig = {'data': traces, 'layout': layout}
 
     return fig, data
 
 
-def calculate_trix(data, current_stock, period, company):
-    # Exponential Moving Average (EMA) of close prices
-    ema_close = data[company['symbol'] == current_stock]['close'].ewm(span=period, min_periods=period).mean()
+def calculate_rsi(data, period=14):
+    # Calculate price changes
+    delta = data['close'].diff()
 
-    # Rate of change of EMA of close prices
-    roc_ema_close = ema_close.pct_change()
+    gains = delta.where(delta > 0, 0)
+    losses = -delta.where(delta < 0, 0)
 
-    # Triple Exponential Moving Average (TRIX)
-    trix = roc_ema_close.ewm(span=period, min_periods=period).mean() * 100
+    avg_gain = gains.rolling(window=period, min_periods=1).mean()
+    avg_loss = losses.rolling(window=period, min_periods=1).mean()
 
-    return trix
+    # Calculate Relative Strength (RS)
+    rs = avg_gain / avg_loss
+
+    # Calculate RSI
+    rsi = 100 - (100 / (1 + rs))
+
+    return rsi
 
 
 if __name__ == '__main__':
